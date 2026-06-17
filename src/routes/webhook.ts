@@ -9,6 +9,7 @@ import { beautyHandler } from '../features/beauty';
 import { cryptoHandler } from '../features/crypto';
 import { stockHandler } from '../features/stock';
 import { ledgerHandler } from '../features/ledger';
+import { helpHandler } from '../features/help';
 
 const router = Router();
 
@@ -18,6 +19,7 @@ const featureRegistry = new Map<string, FeatureHandler>([
   ['crypto', cryptoHandler],
   ['stock', stockHandler],
   ['ledger', ledgerHandler],
+  ['help', helpHandler],
 ]);
 
 const prefixHandlers: Array<{ prefix: string; feature: string }> = [
@@ -26,6 +28,7 @@ const prefixHandlers: Array<{ prefix: string; feature: string }> = [
   { prefix: '股票', feature: 'stock' },
   { prefix: '記帳', feature: 'ledger' },
   { prefix: '帳單', feature: 'ledger' },
+  { prefix: '你會做什麼', feature: 'help' },
 ];
 
 function matchRule(text: string, rules: KeywordRule[]): KeywordRule | undefined {
