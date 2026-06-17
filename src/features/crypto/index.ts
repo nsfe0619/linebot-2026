@@ -1,5 +1,6 @@
 import type { FeatureHandler } from '../../types/feature';
 import { lineClient } from '../../services/line-client';
+import { messagingApi } from '@line/bot-sdk';
 import axios from 'axios';
 
 const COIN_MAP: Record<string, string> = {
@@ -9,17 +10,88 @@ const COIN_MAP: Record<string, string> = {
   SOL: 'solana',
   XRP: 'ripple',
   DOGE: 'dogecoin',
-  ADA: 'cardano',
-  AVAX: 'avalanche-2',
-  DOT: 'polkadot',
-  MATIC: 'matic-network',
 };
 
 interface CoinGeckoPrice {
-  [id: string]: {
-    usd: number;
-    usd_24h_change: number;
-    twd: number;
+  [id: string]: { usd: number; usd_24h_change: number; twd: number };
+}
+
+function coinMenuMessage(): messagingApi.TextMessage {
+  return {
+    type: 'text',
+    text: '請選擇要查詢的幣種：',
+    quickReply: {
+      items: Object.keys(COIN_MAP).map(symbol => ({
+        type: 'action' as const,
+        action: { type: 'message' as const, label: symbol, text: `幣價 ${symbol}` },
+      })),
+    },
+  };
+}
+
+function coinFlexMessage(symbol: string, usd: number, twd: number, change: number): messagingApi.FlexMessage {
+  const arrow = change >= 0 ? '▲' : '▼';
+  const changeColor = change >= 0 ? '#22c55e' : '#ef4444';
+  return {
+    type: 'flex',
+    altText: `${symbol} $${usd.toLocaleString()}`,
+    contents: {
+      type: 'bubble',
+      size: 'kilo',
+      header: {
+        type: 'box',
+        layout: 'vertical',
+        backgroundColor: '#1e293b',
+        contents: [{
+          type: 'text',
+          text: `${symbol} 即時幣價`,
+          color: '#f8fafc',
+          weight: 'bold',
+          size: 'lg',
+        }],
+      },
+      body: {
+        type: 'box',
+        layout: 'vertical',
+        spacing: 'sm',
+        contents: [
+          {
+            type: 'box',
+            layout: 'horizontal',
+            contents: [
+              { type: 'text', text: '💵 USD', color: '#64748b', size: 'sm', flex: 2 },
+              { type: 'text', text: `$${usd.toLocaleString()}`, weight: 'bold', size: 'sm', flex: 3, align: 'end' },
+            ],
+          },
+          {
+            type: 'box',
+            layout: 'horizontal',
+            contents: [
+              { type: 'text', text: '🇹🇼 TWD', color: '#64748b', size: 'sm', flex: 2 },
+              { type: 'text', text: `NT$${twd.toLocaleString()}`, weight: 'bold', size: 'sm', flex: 3, align: 'end' },
+            ],
+          },
+          {
+            type: 'box',
+            layout: 'horizontal',
+            contents: [
+              { type: 'text', text: '24h 漲跌', color: '#64748b', size: 'sm', flex: 2 },
+              { type: 'text', text: `${arrow} ${Math.abs(change).toFixed(2)}%`, color: changeColor, weight: 'bold', size: 'sm', flex: 3, align: 'end' },
+            ],
+          },
+        ],
+      },
+      footer: {
+        type: 'box',
+        layout: 'vertical',
+        contents: [{
+          type: 'button',
+          action: { type: 'message', label: '查詢其他幣種', text: '幣價' },
+          style: 'secondary',
+          height: 'sm',
+        }],
+      },
+    },
   };
 }
 
@@ -33,19 +105,15 @@ export const cryptoHandler: FeatureHandler = {
     const symbol = parts[1]?.toUpperCase();
 
     if (!symbol) {
-      await lineClient.replyMessage({
-        replyToken: event.replyToken,
-        messages: [{ type: 'text', text: '請輸入幣種，例如：幣價 BTC' }],
-      });
+      await lineClient.replyMessage({ replyToken: event.replyToken, messages: [coinMenuMessage()] });
       return;
     }
 
     const coinId = COIN_MAP[symbol];
     if (!coinId) {
-      const supported = Object.keys(COIN_MAP).join('、');
       await lineClient.replyMessage({
         replyToken: event.replyToken,
-        messages: [{ type: 'text', text: `不支援 ${symbol}，目前支援：${supported}` }],
+        messages: [{ ...coinMenuMessage(), text: `不支援 ${symbol}，請選擇：` }],
       });
       return;
     }
@@ -56,17 +124,9 @@ export const cryptoHandler: FeatureHandler = {
         { timeout: 8000 }
       );
       const data = res.data[coinId];
-      const change = data.usd_24h_change.toFixed(2);
-      const arrow = data.usd_24h_change >= 0 ? '▲' : '▼';
-      const text =
-        `${symbol} 即時幣價\n` +
-        `💵 USD：$${data.usd.toLocaleString()}\n` +
-        `🇹🇼 TWD：NT$${data.twd.toLocaleString()}\n` +
-        `24h：${arrow} ${change}%`;
-
       await lineClient.replyMessage({
         replyToken: event.replyToken,
-        messages: [{ type: 'text', text }],
+        messages: [coinFlexMessage(symbol, data.usd, data.twd, data.usd_24h_change)],
       });
     } catch {
       await lineClient.replyMessage({

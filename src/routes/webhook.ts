@@ -23,6 +23,7 @@ const featureRegistry = new Map<string, FeatureHandler>([
 const prefixHandlers: Array<{ prefix: string; feature: string }> = [
   { prefix: '幣價', feature: 'crypto' },
   { prefix: '股價', feature: 'stock' },
+  { prefix: '股票', feature: 'stock' },
   { prefix: '記帳', feature: 'ledger' },
   { prefix: '帳單', feature: 'ledger' },
 ];
