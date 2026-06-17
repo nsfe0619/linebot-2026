@@ -6,13 +6,26 @@ import type { FeatureHandler } from '../types/feature';
 import type { KeywordRule } from '../types/models';
 import { echoHandler } from '../features/echo';
 import { beautyHandler } from '../features/beauty';
+import { cryptoHandler } from '../features/crypto';
+import { stockHandler } from '../features/stock';
+import { ledgerHandler } from '../features/ledger';
 
 const router = Router();
 
 const featureRegistry = new Map<string, FeatureHandler>([
   ['echo', echoHandler],
   ['beauty', beautyHandler],
+  ['crypto', cryptoHandler],
+  ['stock', stockHandler],
+  ['ledger', ledgerHandler],
 ]);
+
+const prefixHandlers: Array<{ prefix: string; feature: string }> = [
+  { prefix: '幣價', feature: 'crypto' },
+  { prefix: '股價', feature: 'stock' },
+  { prefix: '記帳', feature: 'ledger' },
+  { prefix: '帳單', feature: 'ledger' },
+];
 
 function matchRule(text: string, rules: KeywordRule[]): KeywordRule | undefined {
   return rules.find(r => {
@@ -28,19 +41,24 @@ async function handleTextMessage(event: webhook.MessageEvent): Promise<void> {
 
   const messageText = event.message.text;
 
-  let matchedRule: KeywordRule | undefined;
-  try {
-    const snap = await db
-      .collection('keywordRules')
-      .where('enabled', '==', true)
-      .get();
-    const rules = snap.docs.map(d => d.data() as KeywordRule);
-    matchedRule = matchRule(messageText, rules);
-  } catch (err) {
-    console.error('[webhook] Failed to load keywordRules:', err);
-  }
+  // prefix 比對優先（不需要 Firestore）
+  const prefixMatch = prefixHandlers.find(p => messageText.startsWith(p.prefix));
+  let featureName = prefixMatch?.feature;
 
-  const featureName = matchedRule?.feature ?? 'echo';
+  if (!featureName) {
+    let matchedRule: KeywordRule | undefined;
+    try {
+      const snap = await db
+        .collection('keywordRules')
+        .where('enabled', '==', true)
+        .get();
+      const rules = snap.docs.map(d => d.data() as KeywordRule);
+      matchedRule = matchRule(messageText, rules);
+    } catch (err) {
+      console.error('[webhook] Failed to load keywordRules:', err);
+    }
+    featureName = matchedRule?.feature ?? 'echo';
+  }
   const handler = featureRegistry.get(featureName) ?? echoHandler;
 
   try {
